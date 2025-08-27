@@ -106,11 +106,11 @@ if 'parameters' not in st.session_state:
         'systemSize': 800,
         'precision': 0.0001,
         'physicalErrorRate': 0.001,
-        'hoppingParameter': 1,
+        'hoppingParameter': 1.0,  # Ensure float
         'interactionStrength': 8
     }
 if 'results' not in st.session_state:
-    st.session_state.results = None
+    st.session_state.results = calculate_resources(st.session_state.selected_application, st.session_state.parameters)
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 'overview'
 
@@ -142,10 +142,10 @@ with tab_overview:
     with col3:
         st.markdown("⚡ **Optimization Insights**  \nIdentify bottlenecks and improvement opportunities")
 
-# Inside the calculator tab
 with tab_calculator:
     st.header("Resource Calculator")
     col1, col2 = st.columns(2)
+    
     with col1:
         st.subheader("Algorithm Parameters")
         selected_application = st.selectbox(
@@ -154,7 +154,10 @@ with tab_calculator:
             format_func=lambda x: applications[x]['name'],
             index=list(applications.keys()).index(st.session_state.selected_application)
         )
-        st.session_state.selected_application = selected_application
+        
+        # Update selected application
+        if st.session_state.selected_application != selected_application:
+            st.session_state.selected_application = selected_application
 
         system_size = st.slider("System Size (N)", 100, 2000, st.session_state.parameters['systemSize'], step=100)
         precision = st.slider("Required Precision (ε)", 0.00001, 0.01, st.session_state.parameters['precision'], step=0.00001, format="%.5f")
@@ -165,10 +168,11 @@ with tab_calculator:
             hopping_parameter = st.slider("Hopping Parameter", 0.1, 10.0, float(st.session_state.parameters['hoppingParameter']), step=0.1)
             interaction_strength = st.slider("Interaction Strength", 1, 20, int(st.session_state.parameters['interactionStrength']))
         else:
-            hopping_parameter = st.session_state.parameters['hoppingParameter']
-            interaction_strength = st.session_state.parameters['interactionStrength']
+            hopping_parameter = float(st.session_state.parameters['hoppingParameter'])
+            interaction_strength = int(st.session_state.parameters['interactionStrength'])
 
-        st.session_state.parameters = {
+        # Update parameters
+        new_parameters = {
             'systemSize': system_size,
             'precision': precision,
             'physicalErrorRate': physical_error_rate,
@@ -176,8 +180,40 @@ with tab_calculator:
             'interactionStrength': interaction_strength
         }
 
+        # Check if parameters have changed
+        if st.session_state.parameters != new_parameters:
+            st.session_state.parameters = new_parameters
+            # Automatically recalculate resources
+            st.session_state.results = calculate_resources(selected_application, st.session_state.parameters)
+
+        # Manual recalculation button (optional, for user control)
         if st.button("Recalculate Resources"):
             st.session_state.results = calculate_resources(selected_application, st.session_state.parameters)
+
+    with col2:
+        st.subheader("Selected Application")
+        app = applications[selected_application]
+        st.markdown(f"**{app['name']}**  \n{app['description']}  \n**Complexity:** {app['complexity']}  \n**Classical Challenge:** {app['classicalChallenge']}")
+
+    # Display results if available
+    if st.session_state.results:
+        results = st.session_state.results
+        st.subheader("Resource Estimates")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Logical Gates", format_number(results['logicalGates']), "gates")
+        col2.metric("Logical Qubits", format_number(results['logicalQubits']), "qubits")
+        col3.metric("Physical Qubits", format_number(results['physicalQubits']), "qubits")
+        col4.metric("Runtime", f"{results['runtimeHours']:.2f}", "hours")
+
+        st.subheader("Detailed Analysis")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Fault Tolerance Details**  \n- **Surface Code Distance:** {0}  \n- **Fault-Tolerant Overhead:** {1}x  \n- **Block Encoding Parameter (α):** {2}".format(
+                results['surfaceCodeDistance'], format_number(results['faultTolerantOverhead']), results['alpha']))
+        with col2:
+            st.markdown("**Performance Metrics**  \n- **Logical Error Rate:** ~10⁻¹⁰  \n- **Physical-to-Logical Ratio:** {0}:1  \n- **Gate-to-Time Ratio:** {1} gates/hour".format(
+                format_number(results['physicalQubits'] / results['logicalQubits']), format_number(results['logicalGates'] / results['runtimeHours'])))
+
 with tab_primitives:
     st.header("Algorithmic Primitives")
     st.markdown("Building blocks that provide quantum advantage across multiple applications")
